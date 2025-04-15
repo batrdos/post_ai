@@ -1,100 +1,148 @@
 import streamlit as st
-import torch
-# from diffusers import StableDiffusionPipeline
-from PIL import Image
+import replicate
+import urllib.request
 import os
-from dotenv import load_dotenv
+import tempfile
+from PIL import Image
+import io
 
-# Load environment variables
-load_dotenv()
-
-# Set page config
+# Set page configuration
 st.set_page_config(
-    page_title="Instagram Post Generator",
-    page_icon="📸",
+    page_title="Replicate AI Generator",
+    page_icon="🧠",
     layout="wide"
 )
 
-# # Initialize the Stable Diffusion pipeline
-# @st.cache_resource
-# def load_model():
-#     model_id = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-#     pipe = StableDiffusionPipeline.from_pretrained(
-#         model_id,
-#         torch_dtype=torch.float32,
-#         use_safetensors=True
-#     )
-#     if torch.cuda.is_available():
-#         pipe = pipe.to("cuda")
-#     return pipe
+# Add title and description
+st.title("AI Text & Image Generator")
+st.markdown("Generate text using Llama 2 and images using Flux Schnell through Replicate's API")
 
-def main():
-    st.title("📸 Instagram Post Generator")
-    st.write("Upload a sample Instagram post and generate similar images with your custom prompts!")
+# Check for API token
+if "REPLICATE_API_TOKEN" not in os.environ:
+    api_key = st.text_input("Enter your Replicate API Token:", type="password")
+    if api_key:
+        os.environ["REPLICATE_API_TOKEN"] = api_key
+        st.success("API token set successfully!")
+    else:
+        st.warning("Please enter your Replicate API token to continue.")
+        st.stop()
 
-    # Initialize session state for uploaded images
-    if 'uploaded_images' not in st.session_state:
-        st.session_state.uploaded_images = []
+# Create tabs for the different generators
+text_tab, image_tab = st.tabs(["Text Generation", "Image Generation"])
 
-    # File uploader for sample images
-    uploaded_files = st.file_uploader(
-        "Upload sample Instagram posts",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
+# Text Generation Tab
+with text_tab:
+    st.header("Llama 2 Text Generation")
+    
+    text_prompt = st.text_area(
+        "Enter your text prompt:",
+        value="Once upon a time a llama explored",
+        height=100
     )
-
-    if uploaded_files:
-        st.session_state.uploaded_images = uploaded_files
-        st.write(f"Uploaded {len(uploaded_files)} images")
-
-        # Display uploaded images
-        cols = st.columns(min(4, len(uploaded_files)))
-        for idx, img in enumerate(uploaded_files):
-            with cols[idx % len(cols)]:
-                st.image(img, use_column_width=True)
-
-    # User input for prompt
-    prompt = st.text_area(
-        "Enter your prompt for image generation",
-        placeholder="A professional Instagram post showing..."
-    )
-
-    # Additional parameters
+    
     col1, col2 = st.columns(2)
+    
     with col1:
-        num_images = st.slider("Number of images to generate", 1, 4, 1)
+        temperature = st.slider("Temperature:", min_value=0.1, max_value=1.0, value=0.75, step=0.05)
+        top_p = st.slider("Top P:", min_value=0.1, max_value=1.0, value=0.9, step=0.05)
+    
     with col2:
-        guidance_scale = st.slider("Guidance scale (creativity vs. prompt adherence)", 7.0, 15.0, 7.5)
-
-    # Generate button
-    if st.button("Generate Images") and prompt:
-        with st.spinner("Generating images..."):
+        top_k = st.slider("Top K:", min_value=10, max_value=100, value=50, step=5)
+        max_tokens = st.slider("Max New Tokens:", min_value=32, max_value=512, value=128, step=32)
+    
+    if st.button("Generate Text", key="generate_text"):
+        with st.spinner("Generating text..."):
+            text_input = {
+                "prompt": text_prompt,
+                "temperature": temperature,
+                "top_p": top_p,
+                "top_k": top_k,
+                "max_new_tokens": max_tokens,
+                "min_new_tokens": -1
+            }
+            
             try:
-                pipe = load_model()
-                generated_images = []
+                # Create a placeholder for streaming output
+                text_output = st.empty()
+                full_text = ""
                 
-                for _ in range(num_images):
-                    image = pipe(
-                        prompt,
-                        guidance_scale=guidance_scale,
-                        num_inference_steps=50
-                    ).images[0]
-                    generated_images.append(image)
-
-                # Display generated images
-                cols = st.columns(min(4, len(generated_images)))
-                for idx, img in enumerate(generated_images):
-                    with cols[idx % len(cols)]:
-                        st.image(img, use_column_width=True)
-                        st.download_button(
-                            f"Download Image {idx + 1}",
-                            img,
-                            file_name=f"generated_image_{idx + 1}.png",
-                            mime="image/png"
-                        )
-
+                # Stream the output
+                for event in replicate.stream(
+                    "anthropic/claude-3.5-haiku",
+                    input=text_input
+                ):
+                    full_text += event.data
+                    text_output.markdown(f"**Output:**\n\n{full_text}")
+                
+                # Display final output
+                st.success("Text generation completed!")
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
 
-if __name__ == "__main__":
-    main() 
+# Image Generation Tab
+with image_tab:
+    st.header("Flux Schnell Image Generation")
+    
+    image_prompt = st.text_area(
+        "Enter your image prompt:",
+        value="black forest gateau cake spelling out the words \"FLUX SCHNELL\", tasty, food photography, dynamic shot",
+        height=100
+    )
+    
+    if st.button("Generate Image", key="generate_image"):
+        with st.spinner("Generating image (this may take a minute or two)..."):
+            image_input = {
+                "prompt": image_prompt
+            }
+            
+            try:
+                # Run the model
+                output = replicate.run(
+                    "black-forest-labs/flux-schnell",
+                    input=image_input
+                )
+                
+                # Ensure output is treated as a list
+                if isinstance(output, str):
+                    output = [output]
+                
+                # Display images
+                st.success(f"Generated {len(output)} image(s)!")
+                
+                for index, url in enumerate(output):
+                    st.markdown(f"**Image {index+1}:**")
+                    
+                    # Create columns for each image
+                    img_col, dl_col = st.columns([4, 1])
+                    
+                    with img_col:
+                        st.image(url, use_column_width=True)
+                    
+                    with dl_col:
+                        # Add download button
+                        try:
+                            response = urllib.request.urlopen(url)
+                            image_data = response.read()
+                            
+                            st.download_button(
+                                label="Download",
+                                data=image_data,
+                                file_name=f"flux_schnell_{index}.webp",
+                                mime="image/webp"
+                            )
+                        except Exception as e:
+                            st.error(f"Failed to prepare download: {e}")
+                            
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+
+# Add footer with instructions
+st.markdown("---")
+st.markdown("""
+### How to use this app:
+1. Make sure you have a valid [Replicate API token](https://replicate.com/)
+2. Enter your prompt in the respective tab
+3. Adjust parameters as needed
+4. Click the generate button and wait for results
+5. For images, you can download them using the download button
+""")
