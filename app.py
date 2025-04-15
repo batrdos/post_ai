@@ -1,6 +1,6 @@
 import streamlit as st
 import torch
-from diffusers import StableDiffusionXLPipeline
+# from diffusers import StableDiffusionPipeline
 from PIL import Image
 import os
 from dotenv import load_dotenv
@@ -15,18 +15,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize the Stable Diffusion pipeline
-@st.cache_resource
-def load_model():
-    model_id = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-    pipe = StableDiffusionXLPipeline.from_pretrained(
-        model_id,
-        torch_dtype=torch.float16,
-        use_safetensors=True
-    )
-    if torch.cuda.is_available():
-        pipe = pipe.to("cuda")
-    return pipe
+# # Initialize the Stable Diffusion pipeline
+# @st.cache_resource
+# def load_model():
+#     model_id = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+#     pipe = StableDiffusionPipeline.from_pretrained(
+#         model_id,
+#         torch_dtype=torch.float32,
+#         use_safetensors=True
+#     )
+#     if torch.cuda.is_available():
+#         pipe = pipe.to("cuda")
+#     return pipe
 
 def main():
     st.title("📸 Instagram Post Generator")
