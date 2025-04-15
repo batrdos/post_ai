@@ -15,7 +15,7 @@ st.set_page_config(
 
 # Add title and description
 st.title("AI Text & Image Generator")
-st.markdown("Generate text using Sonnet Haiku and images using Flux Schnell through Replicate's API")
+st.markdown("Generate text using Claude Sonnet 3.5 and images using custom Flux through Replicate's API")
 
 # Check for API token
 if "REPLICATE_API_TOKEN" not in os.environ:
@@ -98,7 +98,7 @@ if st.button("Generate Text", key="generate_text"):
             
             # Stream the output
             for event in replicate.stream(
-                "anthropic/claude-3.5-haiku",
+                "anthropic/claude-3.5-sonnet",
                 input=text_input
             ):
                 full_text += event.data
@@ -125,7 +125,7 @@ image_prompt = st.text_area(
 )
 
 if st.button("Generate Image", key="generate_image"):
-    with st.spinner("Generating image (this may take a minute or two)..."):
+    with st.spinner("Generating image ..."):
         image_input = {
             "model": "dev",
             "prompt": image_prompt,
